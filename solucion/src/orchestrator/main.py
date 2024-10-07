@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import json
 import os
 from dotenv import load_dotenv
+import requests
 
 # Cargar las variables de entorno desde el archivo .env
 load_dotenv()
@@ -12,6 +13,15 @@ serper_api_key = os.getenv("SERPER_API_KEY")
 huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY")
 
 def search_google(query: str):
+    """
+La función search_google utiliza la API de Serper para buscar en Google según una consulta y devuelve una lista de hasta 5 enlaces de resultados 
+de búsqueda. 
+query: El parámetro query en la función search_google es una cadena que representa la consulta de búsqueda que deseas realizar en Google utilizando
+la API de Serper. Puedes ingresar cualquier consulta de búsqueda que desees buscar en Google.
+query: str
+:return: Una lista de diccionarios que contiene el título y el enlace de los 5 principales resultados de búsqueda de Google basados en la consulta
+proporcionada. Si hay un error durante la búsqueda, se devolverá una lista vacía.
+    """
     """Buscar en Google usando la API de Serper"""
     url = "https://google.serper.dev/search"
     headers = {
@@ -20,8 +30,8 @@ def search_google(query: str):
     }
     data = json.dumps({
         "q": query,
-        "gl": "ar",  # Cambia este valor según tu país
-        "hl": "es"   # Cambia este valor según el idioma preferido
+        "gl": "ar",  # Argentina
+        "hl": "es"   # Idioma Español
     })
 
     response = requests.post(url, headers=headers, data=data)
@@ -32,9 +42,16 @@ def search_google(query: str):
     else:
         print(f"Error en la búsqueda: {response.status_code} - {response.text}")
         return []
-
 def extract_text_from_url(url: str) -> str:
-    """Extraer el texto principal de una página web"""
+    """
+    Extraer el texto principal de una página web
+    Parameters:
+        url (str): La URL de la página web de la que se extraerá el texto.
+    Returns:
+        str: El texto principal extraído de la página web, o un mensaje de error si no se pudo extraer contenido relevante.
+    """
+    if not url:
+        return "No se pudo extraer contenido relevante."  # Manejo de URL vacía
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -42,9 +59,13 @@ def extract_text_from_url(url: str) -> str:
         # Parsear el contenido HTML de la página
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Intentar extraer el texto de los elementos principales de la página
+        # Intentar extraer el texto de los párrafos
         paragraphs = soup.find_all('p')
         article_text = "\n".join([para.get_text() for para in paragraphs])
+
+        # Si no hay párrafos, intentar extraer todo el texto visible
+        if not article_text.strip():
+            article_text = "\n".join(soup.stripped_strings)
 
         # Devolver el texto extraído
         return article_text.strip() if article_text else "No se pudo extraer contenido relevante."
@@ -54,6 +75,12 @@ def extract_text_from_url(url: str) -> str:
         return "Error al extraer el contenido."
 
 def extract_texts_from_search_results(query: str):
+    """
+Buscar en Google y extraer el texto de los primeros 5 resultados
+query: La consulta de búsqueda para buscar en Google y extraer texto de los resultados.
+query: str
+:return: Una lista de diccionarios con el título, enlace y contenido de los primeros 5 resultados de búsqueda de Google.
+    """
     """Buscar en Google y extraer el texto de los primeros 5 resultados"""
     search_results = search_google(query)
 
@@ -73,6 +100,16 @@ def extract_texts_from_search_results(query: str):
     return extracted_texts
 
 def interact_with_llm_huggingface_streaming(user_input: str, extracted_texts: list):
+    """
+Interactuar con el modelo de lenguaje utilizando Hugging Face con streaming.
+Parameters:
+user_input (str): La pregunta o solicitud del usuario.
+extracted_texts (list): Una lista de diccionarios que contiene los datos de texto extraídos con las claves 'title', 'link', y 'content'.
+Returns:
+    None
+Raises:
+    None
+    """
     """Interactuar con el modelo de lenguaje utilizando Hugging Face con streaming"""
     
     extracted_info = "\n\n".join([f"Título: {item['title']}\nEnlace: {item['link']}\nContenido:\n{item['content']}" for item in extracted_texts])
@@ -105,9 +142,9 @@ def interact_with_llm_huggingface_streaming(user_input: str, extracted_texts: li
     print("Generando respuesta en tiempo real:\n")
     for line in response.iter_lines():
         if line:
-            # Decodificar la línea recibida y mostrarla en la terminal
-            response_text = line.decode('utf-8')
-            print(response_text)
+        
+            response_text = line
+        print(response_text)
 
 if __name__ == "__main__":
     # Consulta de ejemplo
